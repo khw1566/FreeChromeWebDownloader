@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Media Downloader Pro",
+  "version": "1.2.1",
+  "description": "Detect and download media files (MP4, MP3, WEBM, M4A, HLS) from web pages.",
+  "permissions": [
+    "downloads",
+    "webRequest",
+    "activeTab",
+    "tabs",
+    "storage",
+    "scripting",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+      ,"all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Media Downloader Pro"
+  }
+}

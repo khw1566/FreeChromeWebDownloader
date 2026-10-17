@@ -1,0 +1,7 @@
+native/.venv/
+native/tools/
+native/__pycache__/
+native/launch.cmd
+native/com.media_downloader.helper.json
+tests/fixtures/
+tests/*.png
