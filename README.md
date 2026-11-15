@@ -2,26 +2,23 @@
 
 일반 MP4/WebM/오디오 파일과 유튜브 등 영상 페이지를 같은 목록에서 선택해 다운로드합니다. 영상과 음성이 분리된 DASH/HLS 스트림은 PC 보조 프로그램에서 다운로드하고 FFmpeg로 합칩니다. MP3 음원 저장도 지원합니다.
 
-## Windows 최초 설치
+## Windows 개인용 설치
 
-1. Chrome의 `chrome://extensions`에서 개발자 모드를 켜고 **압축해제된 확장 프로그램을 로드**로 이 폴더를 선택합니다. 이미 로드했다면 새로고침 버튼을 누릅니다.
-2. 확장 프로그램 카드의 **ID**를 복사합니다.
-3. Python 3.10 이상과 [FFmpeg](https://ffmpeg.org/download.html) (`ffmpeg`, `ffprobe`), [Deno](https://deno.com/) 또는 지원되는 [Node.js](https://nodejs.org/)를 설치하고 PATH에 추가합니다. YouTube JavaScript 처리에는 최신 런타임이 필요합니다.
-4. PowerShell에서 이 폴더로 이동한 후 아래 명령으로 Python 패키지를 설치합니다.
+웹스토어 등록 없이 `chrome://extensions`의 개발자 모드에서 이 폴더를 **압축해제된 확장 프로그램으로 로드**해서 사용합니다.
 
-   ```powershell
-   python -m pip install -U "yt-dlp[default]"
-   ```
+1. Python 3.10 이상, [FFmpeg](https://ffmpeg.org/download.html) (`ffmpeg`, `ffprobe`), [Node.js](https://nodejs.org/) 22 이상 또는 지원되는 Deno를 설치합니다.
+2. 이 폴더의 **`setup_helper.bat`을 더블클릭**합니다. Chrome에 로드된 이 폴더의 확장 ID를 자동으로 찾고, 전용 Python 환경에 최신 `yt-dlp[default]`와 YouTube JS 처리 패키지를 설치하고 PC 보조 프로그램을 연결합니다. 관리자 권한은 필요하지 않습니다.
+3. `chrome://extensions`에서 이 확장의 새로고침 버튼을 누르고 영상 페이지도 새로고침합니다. 확장 팝업에서 **연결 확인**을 누릅니다.
 
-5. 아래 명령의 ID를 2번에서 복사한 실제 값으로 바꿔 실행합니다.
+일반 MP4/WebM 파일은 보조 프로그램 없이 Chrome에서 저장합니다. YouTube, HLS/DASH 병합, MP3 변환에는 PC 보조 프로그램이 필요합니다. 여기서 연결 등록은 Windows의 로컬 실행 경로 설정이며 웹스토어 등록과는 관계없습니다.
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\native\install.ps1 -ExtensionId 실제확장프로그램ID
-   ```
+연결이 끊기거나 폴더를 옮겼다면 `setup_helper.bat`을 다시 실행하세요. 이 스크립트는 전용 환경 `native/.venv`, 실행 경로 설정과 현재 사용자 Chrome 네이티브 호스트 레지스트리 키를 작성합니다. 시스템 Python 패키지를 변경하지 않습니다.
 
-   Python이 여러 개라면 `-PythonPath "C:\경로\python.exe"`를 추가하세요. 설치 스크립트는 현재 사용자 Chrome 네이티브 호스트 레지스트리 키와 이 폴더 안의 실행 파일/설정 파일을 작성합니다. 관리자 권한은 필요하지 않습니다. 이 폴더를 옮기면 다시 등록하세요.
+확장 ID 자동 감지가 안 되는 다른 Chrome 프로필/사용자 데이터 폴더에서는 직접 지정할 수 있습니다.
 
-6. Chrome을 완전히 종료한 후 다시 실행하고 확장 프로그램의 **연결 확인**을 누릅니다.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\native\install.ps1 -ExtensionId 실제확장프로그램ID -UpdateDependencies
+```
 
 ## 사용
 
@@ -47,7 +44,7 @@
 
 확장 프로그램 새로고침 후 기존 웹 페이지도 새로고침해 주세요. 이미 설치한 보조 프로그램은 다시 등록하지 않아도 됩니다.
 
-사이트마다 지원 여부가 다르며 DRM 보호 영상은 지원하지 않습니다. 로그인/유료/지역 제한 영상은 실패할 수 있습니다. 브라우저 쿠키를 자동으로 읽거나 전송하지 않습니다. 다운로드 가능한 권한이 있는 영상에 사용하세요. 사이트 변경으로 실패하면 `python -m pip install -U "yt-dlp[default]"`로 갱신하세요.
+사이트마다 지원 여부가 다르며 DRM 보호 영상은 지원하지 않습니다. 로그인/유료/지역 제한 영상은 실패할 수 있습니다. 브라우저 쿠키를 자동으로 읽거나 전송하지 않습니다. 감지한 스트림을 보조 프로그램으로 다운로드할 때 현재 페이지 주소를 Referer로 사용합니다. 다운로드 가능한 권한이 있는 영상에 사용하세요. 사이트 변경으로 실패하면 `python -m pip install -U "yt-dlp[default]"`로 갱신하세요.
 
 ## 속도 개선 (1.2.1)
 
@@ -64,3 +61,7 @@ Remove-Item -LiteralPath 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.
 ```
 
 참고: [yt-dlp 지원 및 의존성](https://github.com/yt-dlp/yt-dlp), [YouTube 런타임 안내](https://github.com/yt-dlp/yt-dlp/wiki/EJS), [Chrome 네이티브 메시징](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging).
+
+## 다운로드 복구 (1.2.2)
+
+페이지 DOM 생성 전 영상 감지가 중단되는 문제를 수정하고, 팝업을 열 때 기존 탭과 iframe을 자동으로 다시 스캔합니다. 일반 사이트에서 영상 파일/재생목록이 하나만 감지되면 현재 페이지 다운로드도 감지한 주소를 사용합니다. 여러 영상이 있으면 목록에서 원하는 파일을 선택하세요. 직접 입력한 MP4/WebM 등 파일 주소도 Chrome 다운로드를 사용합니다. 보조 프로그램 연결 실패 시 실행할 설치 파일을 오류 메시지에 안내합니다.

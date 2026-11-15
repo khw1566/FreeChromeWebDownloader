@@ -110,6 +110,7 @@ class MediaTracker {
       this.addMediaItem(details.tabId, {
         url: url,
         contentType: contentType || this.inferContentType(url),
+        fromHeaders: true,
         size: contentLength,
         type: type,
         title: this.extractFilename(url),
@@ -182,9 +183,11 @@ class MediaTracker {
 
     if (tabMediaMap.has(mediaInfo.url)) {
       const existing = tabMediaMap.get(mediaInfo.url);
-      if (mediaInfo.size > existing.size) {
-        existing.size = mediaInfo.size;
-      }
+      const contentType = existing.fromHeaders && !mediaInfo.fromHeaders ? existing.contentType : mediaInfo.contentType || existing.contentType;
+      const type = existing.fromHeaders && !mediaInfo.fromHeaders ? existing.type : mediaInfo.type || existing.type;
+      Object.assign(existing, mediaInfo, { contentType, type, fromHeaders: existing.fromHeaders || mediaInfo.fromHeaders,
+        size: Math.max(existing.size || 0, mediaInfo.size || 0), isHls: existing.isHls || mediaInfo.isHls });
+      chrome.runtime.sendMessage({ action: 'MEDIA_DETECTED', tabId, mediaItem: existing }).catch(() => {});
     } else {
       tabMediaMap.set(mediaInfo.url, mediaInfo);
       this.updateBadge(tabId, tabMediaMap.size);
@@ -344,8 +347,8 @@ class MediaTracker {
       const list = tabMediaMap ? Array.from(tabMediaMap.values()) : [];
       sendResponse({ success: true, mediaList: list });
     } else if (action === 'ADD_DOM_MEDIA') {
-      const tabId = (sender.tab && sender.tab.id) ? sender.tab.id : message.tabId;
-      if (tabId && message.items && Array.isArray(message.items)) {
+      const tabId = sender.tab?.id ?? message.tabId;
+      if (Number.isInteger(tabId) && tabId >= 0 && message.items && Array.isArray(message.items)) {
         message.items.forEach(item => this.addMediaItem(tabId, item));
       }
       sendResponse({ success: true });

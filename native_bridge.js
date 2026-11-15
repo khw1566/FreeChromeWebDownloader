@@ -8,11 +8,11 @@ class DownloadQueue {
     this.ready = this.restore();
     chrome.downloads.onChanged.addListener(() => this.ready.then(() => this.refreshDirect()).catch(console.error));
     chrome.runtime.onMessage.addListener((message, sender, reply) => {
-      if (sender.id !== chrome.runtime.id || sender.tab) return false;
+      if (sender.id !== chrome.runtime.id || (sender.tab && !sender.url?.startsWith('chrome-extension://' + chrome.runtime.id + '/'))) return false;
       if (message?.action === 'HELPER_STATUS') {
         chrome.runtime.sendNativeMessage('com.media_downloader.helper', { action: 'status' }, result => {
           const error = chrome.runtime.lastError;
-          reply(error ? { success: false, error: '보조 프로그램 연결 실패. README.md의 설치 안내를 확인하세요.' } : result);
+          reply(error ? { success: false, error: this.helperError(error.message) } : result);
         });
         return true;
       }
@@ -67,12 +67,15 @@ class DownloadQueue {
     const prepared = message.items.map(item => {
       const url = new URL(item.source === 'current-page' ? tab.url : item.url);
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('웹 영상 주소만 사용할 수 있습니다.');
-      const page = ['page', 'current-page'].includes(item.source);
+      const directFile = /\.(mp4|webm|mov|mkv|mp3|m4a|ogg|wav|flac|aac)(?:[?#]|$)/i.test(url.href);
+      const page = ['page', 'current-page'].includes(item.source) && !directFile;
       const youtubeStream = /(^|\.)googlevideo\.com$/i.test(url.hostname);
       const downloadUrl = youtubeStream ? tab.url : url.href;
       if (!/^https?:\/\//i.test(downloadUrl || '')) throw new Error('영상 페이지 주소를 찾을 수 없습니다.');
       return {
-        itemKey: item.url, url: downloadUrl, title: String(item.title || tab.title || 'media').slice(0, 300),
+        itemKey: item.itemKey || item.url, url: downloadUrl, title: String(item.title || tab.title || 'media').slice(0, 300),
+        contentType: item.contentType || '',
+        referrer: page || youtubeStream || !/^https?:\/\//i.test(tab.url || '') ? undefined : tab.url,
         engine: page || youtubeStream || format === 'mp3' || item.isHls || /\.(m3u8|mpd)(?:[?#]|$)/i.test(url.href) || /mpegurl|dash\+xml/i.test(item.contentType || '') ? 'native' : 'direct',
         source: item.source || 'media', format, quality, tabId: tab.id
       };
@@ -128,13 +131,25 @@ class DownloadQueue {
     port.onDisconnect.addListener(() => {
       const reason = chrome.runtime.lastError?.message;
       if (!this.ports.has(job.id)) return;
-      this.finish(job, { state: 'error', error: reason?.includes('host not found') ? '보조 프로그램이 등록되지 않았습니다. 연결 확인을 눌러 주세요.' : reason || '보조 프로그램 연결이 종료되었습니다.' });
+      this.finish(job, { state: 'error', error: this.helperError(reason) });
     });
-    port.postMessage({ action: 'download', url: job.url, quality: job.quality, format: job.format });
+    port.postMessage({ action: 'download', url: job.url, quality: job.quality, format: job.format, referrer: job.referrer });
+  }
+
+  helperError(reason) {
+    if (/host.*not found|specified native messaging host|access.*forbidden/i.test(reason || '')) {
+      return 'PC 보조 프로그램 연결 설정이 필요합니다. 확장 폴더의 setup_helper.bat을 실행한 후 다시 시도하세요. (웹스토어 등록은 필요하지 않습니다.)';
+    }
+    return (reason || '보조 프로그램 연결이 종료되었습니다.') + ' · setup_helper.bat으로 연결을 복구할 수 있습니다.';
   }
 
   async startDirect(job) {
-    const filename = this.filename(job.title);
+    let filename = this.filename(job.title);
+    if (!/\.[a-z0-9]{2,5}$/i.test(filename)) {
+      const extension = new URL(job.url).pathname.match(/\.(mp4|webm|mov|mkv|mp3|m4a|ogg|wav|flac|aac)$/i)?.[0];
+      const mimeExtensions = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'audio/mpeg': '.mp3', 'audio/mp4': '.m4a' };
+      filename += extension || mimeExtensions[job.contentType.split(';')[0]] || '';
+    }
     const downloadId = await chrome.downloads.download({ url: job.url, filename: 'Media Downloader/' + filename, saveAs: false, conflictAction: 'uniquify' });
     this.update(job, { downloadId, state: 'downloading', percent: null });
     await this.refreshDirect();

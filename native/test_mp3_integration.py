@@ -7,6 +7,7 @@ from pathlib import Path
 import struct
 import subprocess
 import threading
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
@@ -42,6 +43,7 @@ class MP3IntegrationTest(unittest.TestCase):
     def test_parallel_hls_download_produces_playable_video(self):
         root = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'parallel_hls'
         root.mkdir(parents=True, exist_ok=True)
+        output = tempfile.TemporaryDirectory(dir=root)
         playlist = root / 'parallel_video.m3u8'
         subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=10', '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', '3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-g', '5', '-c:a', 'aac', '-hls_time', '0.5', '-hls_playlist_type', 'vod', str(playlist)], check=True)
         ConcurrentHLSHandler.active = ConcurrentHLSHandler.peak = 0
@@ -49,10 +51,10 @@ class MP3IntegrationTest(unittest.TestCase):
         threading.Thread(target=server.serve_forever, daemon=True).start()
         protocol = io.BytesIO()
         try:
-            with patch.object(host, 'status', return_value={'success': True, 'folder': str(root / 'output')}), patch.object(host, 'PROTOCOL_OUT', protocol):
+            with patch.object(host, 'status', return_value={'success': True, 'folder': output.name}), patch.object(host, 'PROTOCOL_OUT', protocol):
                 host.download({'url': f'http://127.0.0.1:{server.server_port}/parallel_video.m3u8', 'format': 'video'})
             self.assertGreaterEqual(ConcurrentHLSHandler.peak, 2)
-            video = next((root / 'output').glob('*.mp4'))
+            video = next(Path(output.name).glob('*.mp4'))
             probe = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'json', str(video)], capture_output=True, check=True)
             self.assertGreaterEqual(float(json.loads(probe.stdout)['format']['duration']), 3)
             data = protocol.getvalue()
@@ -65,10 +67,12 @@ class MP3IntegrationTest(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+            output.cleanup()
 
     def test_real_mp3_download_and_codec(self):
         root = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures'
         root.mkdir(parents=True, exist_ok=True)
+        output = tempfile.TemporaryDirectory(dir=root)
         sample = root / 'sample.wav'
         subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', str(sample)], check=True)
         server = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(QuietHandler, directory=str(root)))
@@ -76,9 +80,9 @@ class MP3IntegrationTest(unittest.TestCase):
         thread.start()
         protocol = io.BytesIO()
         try:
-            with patch.object(host, 'status', return_value={'success': True, 'folder': str(root / 'output')}), patch.object(host, 'PROTOCOL_OUT', protocol):
+            with patch.object(host, 'status', return_value={'success': True, 'folder': output.name}), patch.object(host, 'PROTOCOL_OUT', protocol):
                 host.download({'url': f'http://127.0.0.1:{server.server_port}/sample.wav', 'format': 'mp3'})
-            mp3 = next((root / 'output').glob('*.mp3'))
+            mp3 = next(Path(output.name).glob('*.mp3'))
             probe = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'stream=codec_name,bit_rate', '-of', 'json', str(mp3)], capture_output=True, check=True)
             stream = json.loads(probe.stdout)['streams'][0]
             self.assertEqual(stream['codec_name'], 'mp3')
@@ -95,6 +99,7 @@ class MP3IntegrationTest(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+            output.cleanup()
 
 
 if __name__ == '__main__':

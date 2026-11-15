@@ -15,6 +15,7 @@ class DOMMediaScanner {
   }
 
   initInjectedScript() {
+    if (this.injected) return;
     try {
       const script = document.createElement('script');
       script.src = chrome.runtime.getURL('injected.js');
@@ -22,6 +23,7 @@ class DOMMediaScanner {
         this.remove();
       };
       (document.head || document.documentElement).appendChild(script);
+      this.injected = true;
     } catch (e) {}
   }
 
@@ -225,7 +227,9 @@ class DOMMediaScanner {
     const filename = this.extractFilename(url);
     return {
       url: url,
-      contentType: mimeType || (defaultType === 'video' ? 'video/mp4' : 'audio/mpeg'),
+      contentType: /\.m3u8(?:[?#]|$)/i.test(url) ? 'application/vnd.apple.mpegurl' :
+        /\.mpd(?:[?#]|$)/i.test(url) ? 'application/dash+xml' : mimeType || (defaultType === 'video' ? 'video/mp4' : 'audio/mpeg'),
+      isHls: /\.m3u8(?:[?#]|$)/i.test(url),
       size: 0,
       type: defaultType,
       title: filename
@@ -259,6 +263,12 @@ class DOMMediaScanner {
 
 const scanner = new DOMMediaScanner();
 globalThis.__mediaDownloaderScanner = scanner;
-scanner.scan();
-scanner.observe();
+// document_start can run before even documentElement exists.
+const start = () => {
+  scanner.initInjectedScript();
+  scanner.scan();
+  scanner.observe();
+};
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+else start();
 })();

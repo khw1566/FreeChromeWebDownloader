@@ -3,5 +3,6 @@ native/tools/
 native/__pycache__/
 native/launch.cmd
 native/com.media_downloader.helper.json
+native/helper_config.json
 tests/fixtures/
 tests/*.png

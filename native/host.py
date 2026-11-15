@@ -16,6 +16,11 @@ PROTOCOL_LOCK = threading.Lock()
 
 # Use project-local tools without changing the user's global PATH.
 TOOLS_DIR = Path(__file__).resolve().parent / 'tools'
+CONFIG_PATH = Path(__file__).resolve().parent / 'helper_config.json'
+if CONFIG_PATH.is_file():
+    for directory in json.loads(CONFIG_PATH.read_text(encoding='utf-8')).get('toolDirectories', []):
+        if Path(directory).is_dir():
+            os.environ['PATH'] = directory + os.pathsep + os.environ.get('PATH', '')
 FFMPEG_BIN = next(TOOLS_DIR.glob('ffmpeg/**/bin/ffmpeg.exe'), None)
 if FFMPEG_BIN:
     os.environ['PATH'] = str(FFMPEG_BIN.parent) + os.pathsep + os.environ.get('PATH', '')
@@ -50,6 +55,8 @@ def status():
     missing = []
     if importlib.util.find_spec('yt_dlp') is None:
         missing.append('yt-dlp[default]')
+    if importlib.util.find_spec('yt_dlp_ejs') is None:
+        missing.append('yt-dlp-ejs (setup_helper.bat 실행)')
     for tool in ('ffmpeg', 'ffprobe'):
         if not shutil.which(tool):
             missing.append(tool)
@@ -149,6 +156,12 @@ def download(message):
     }
     if output_format == 'mp3':
         options['postprocessors'] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}]
+    referrer = message.get('referrer')
+    if referrer:
+        referrer_url = urlsplit(referrer)
+        if referrer_url.scheme not in ('http', 'https') or not referrer_url.hostname or '\r' in referrer or '\n' in referrer:
+            raise ValueError('Invalid referrer')
+        options['http_headers'] = {'Referer': referrer}
     # Libraries must never write text into Chrome's protocol stream.
     with contextlib.redirect_stdout(sys.stderr):
         with YoutubeDL(options) as downloader:

@@ -53,7 +53,8 @@ class UnifiedDownloadUI {
         if (item) { item.size = message.size; this.renderList(); }
       }
     });
-    await Promise.all([this.loadMedia(), this.refreshJobs()]);
+    // Recover DOM/resource URLs after a service-worker restart or extension reload.
+    await Promise.all([this.rescan(false), this.refreshJobs()]);
     // DownloadDelta does not carry bytesReceived; query actual Chrome counters.
     this.pollTimer = setInterval(() => this.refreshJobs(), 1000);
     window.addEventListener('unload', () => clearInterval(this.pollTimer), { once: true });
@@ -71,11 +72,11 @@ class UnifiedDownloadUI {
     this.renderList();
   }
 
-  async rescan() {
+  async rescan(reportError = true) {
     try {
       await chrome.scripting.executeScript({ target: { tabId: this.tab.id, allFrames: true }, files: ['content.js'] });
-      await this.loadMedia();
-    } catch (error) { this.notice('이 페이지는 다시 스캔할 수 없습니다: ' + error.message); }
+    } catch (error) { if (reportError) this.notice('이 페이지는 다시 스캔할 수 없습니다: ' + error.message); }
+    await this.loadMedia();
   }
 
   addUrls() {
@@ -126,7 +127,19 @@ class UnifiedDownloadUI {
     this.submitting = true;
     this.updateButtons();
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'QUEUE_DOWNLOADS', tabId: this.tab.id, items, format, quality: document.getElementById('pageQuality').value });
+      // A generic HTML page (including iframe players) is not a media URL.
+      // When exactly one video was detected, use that file/manifest directly.
+      const videos = this.media.filter(item => {
+        try {
+          const url = new URL(item.url);
+          return item.type === 'video' && /^https?:$/.test(url.protocol) &&
+            !/(^|\.)googlevideo\.com$/i.test(url.hostname) && !/\.(m4s|ts)(?:[?#]|$)/i.test(url.href);
+        } catch { return false; }
+      });
+      const youtube = /(^|\.)(youtube\.com|youtu\.be)$/i.test(new URL(this.tab.url).hostname);
+      const requests = items.map(item => item.source === 'current-page' && !youtube && videos.length === 1
+        ? { ...videos[0], source: 'media', itemKey: item.url } : item);
+      const response = await chrome.runtime.sendMessage({ action: 'QUEUE_DOWNLOADS', tabId: this.tab.id, items: requests, format, quality: document.getElementById('pageQuality').value });
       if (!response?.success) throw new Error(response?.error || '다운로드를 시작하지 못했습니다.');
       this.mergeJobs(response.jobs || []);
       this.notice(response.added + '개 다운로드를 추가했습니다.' + (response.skipped ? ' 진행 중인 ' + response.skipped + '개는 건너뛰었습니다.' : '') + ' 최대 3개씩 동시에 처리합니다.');

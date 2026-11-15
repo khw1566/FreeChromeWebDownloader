@@ -90,3 +90,22 @@ test('entire invalid batch rejected without partial enqueue', async () => {
   await assert.rejects(() => queue.enqueue({ tabId: 1, items: [...pages(1), { url: 'file:///C:/secret' }] }));
   assert.equal(queue.jobs.size, 0);
 });
+
+test('pasted media file URL uses Chrome without the native helper', async () => {
+  const { queue, ports, downloads } = await setup();
+  await queue.enqueue({ tabId: 1, items: [{ url: 'https://example.com/movie.mp4?token=fixture', source: 'page', title: 'Movie' }] });
+  await settle();
+  const job = [...queue.jobs.values()][0];
+  assert.equal(job.engine, 'direct');
+  assert.equal(ports.length, 0);
+  assert.equal(downloads.get(job.downloadId).filename, 'Media Downloader/Movie.mp4');
+});
+
+test('extensionless HLS uses native merge and preserves page referer', async () => {
+  const { queue, ports } = await setup();
+  await queue.enqueue({ tabId: 1, items: [{ url: 'https://example.com/playlist?token=fixture', contentType: 'application/vnd.apple.mpegurl' }] });
+  await settle();
+  assert.equal(ports.length, 1);
+  assert.equal(ports[0].request.url, 'https://example.com/playlist?token=fixture');
+  assert.equal(ports[0].request.referrer, 'https://www.youtube.com/watch?v=test');
+});
